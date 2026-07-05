@@ -59,7 +59,9 @@ gifust tui
 - **Options** (droite) : FPS, largeur, découpe, couleurs, tramage, filtre, boucle, sortie. Un panneau décrit le champ sélectionné (rôle, type attendu, exemple).
 - **Barre d'aide** en bas, contextuelle.
 
-Raccourcis : `j`/`k` naviguer · `Tab` changer de panneau · `↵` ouvrir / éditer · `0-9` saisir directement une valeur · `h`/`l` remonter d'un dossier / changer une valeur · `c` convertir · `q` quitter.
+Le TUI démarre en thème sombre ; `t` bascule entre sombre et clair.
+
+Raccourcis : `j`/`k` naviguer · `Tab` changer de panneau · `↵` ouvrir / éditer · `0-9` saisir directement une valeur · `h`/`l` remonter d'un dossier / changer une valeur · `c` convertir · `t` thème sombre/clair · `q` quitter.
 
 ## Formats vidéo reconnus
 

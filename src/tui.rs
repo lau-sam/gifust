@@ -19,7 +19,59 @@ const VIDEO_EXTS: &[&str] = &[
     "ogv",
 ];
 
-const ACCENT: Color = Color::Magenta;
+/// Palette de couleurs du TUI. Deux variantes : sombre (défaut) et claire.
+#[derive(Clone, Copy)]
+struct Theme {
+    bg: Color,
+    fg: Color,
+    accent: Color,
+    label: Color,
+    dim: Color,
+    hint: Color,
+    dir: Color,
+    video: Color,
+    unfocused: Color,
+    status: Color,
+    hl_fg: Color,
+}
+
+impl Theme {
+    fn new(dark: bool) -> Self {
+        if dark {
+            Theme {
+                bg: Color::Rgb(30, 30, 46),
+                fg: Color::Rgb(205, 214, 244),
+                accent: Color::Rgb(203, 166, 247),
+                label: Color::Rgb(147, 153, 178),
+                dim: Color::Rgb(108, 112, 134),
+                hint: Color::Rgb(137, 220, 235),
+                dir: Color::Rgb(137, 180, 250),
+                video: Color::Rgb(166, 227, 161),
+                unfocused: Color::Rgb(69, 71, 90),
+                status: Color::Rgb(249, 226, 175),
+                hl_fg: Color::Rgb(30, 30, 46),
+            }
+        } else {
+            Theme {
+                bg: Color::Rgb(239, 241, 245),
+                fg: Color::Rgb(76, 79, 105),
+                accent: Color::Rgb(136, 57, 239),
+                label: Color::Rgb(108, 111, 133),
+                dim: Color::Rgb(156, 160, 176),
+                hint: Color::Rgb(23, 146, 153),
+                dir: Color::Rgb(30, 102, 245),
+                video: Color::Rgb(64, 160, 43),
+                unfocused: Color::Rgb(204, 208, 218),
+                status: Color::Rgb(223, 142, 29),
+                hl_fg: Color::Rgb(239, 241, 245),
+            }
+        }
+    }
+
+    fn base(self) -> Style {
+        Style::default().bg(self.bg).fg(self.fg)
+    }
+}
 
 pub fn run() -> Result<()> {
     let mut terminal = ratatui::init();
@@ -44,6 +96,7 @@ struct App {
     options: OptionsForm,
     selected_video: Option<PathBuf>,
     status: String,
+    dark: bool,
     should_quit: bool,
 }
 
@@ -55,6 +108,7 @@ fn run_app(terminal: &mut DefaultTerminal) -> Result<()> {
         options: OptionsForm::default(),
         selected_video: None,
         status: "Choisis une vidéo, règle les options, puis 'c' pour convertir.".into(),
+        dark: true,
         should_quit: false,
     };
 
@@ -470,6 +524,7 @@ fn handle_key(terminal: &mut DefaultTerminal, app: &mut App, code: KeyCode) -> R
             }
         }
         KeyCode::Char('c') => do_convert(terminal, app)?,
+        KeyCode::Char('t') => app.dark = !app.dark,
         _ => match app.focus {
             Focus::Browser => handle_browser(app, code),
             Focus::Options => handle_options(app, code),
@@ -541,6 +596,11 @@ fn do_convert(terminal: &mut DefaultTerminal, app: &mut App) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 fn ui(f: &mut Frame, app: &mut App) {
+    let theme = Theme::new(app.dark);
+
+    // Fond forcé du thème sur toute la surface.
+    f.render_widget(Block::default().style(theme.base()), f.area());
+
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -555,33 +615,34 @@ fn ui(f: &mut Frame, app: &mut App) {
         Span::styled(
             " gifust ",
             Style::default()
-                .fg(Color::Black)
-                .bg(ACCENT)
+                .fg(theme.bg)
+                .bg(theme.accent)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw("  vidéo → gif"),
+        Span::styled("  vidéo → gif", Style::default().fg(theme.fg)),
     ]);
-    f.render_widget(Paragraph::new(title), rows[0]);
+    f.render_widget(Paragraph::new(title).style(theme.base()), rows[0]);
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
         .split(rows[1]);
 
-    draw_browser(f, app, cols[0]);
-    draw_options(f, app, cols[1]);
+    draw_browser(f, app, cols[0], &theme);
+    draw_options(f, app, cols[1], &theme);
 
     f.render_widget(
         Paragraph::new(Line::from(Span::styled(
             format!(" {}", app.status),
-            Style::default().fg(Color::Yellow),
-        ))),
+            Style::default().fg(theme.status),
+        )))
+        .style(theme.base()),
         rows[2],
     );
-    draw_help(f, app, rows[3]);
+    draw_help(f, app, rows[3], &theme);
 }
 
-fn draw_browser(f: &mut Frame, app: &mut App, area: Rect) {
+fn draw_browser(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let focused = app.focus == Focus::Browser;
     let items: Vec<ListItem> = app
         .browser
@@ -589,28 +650,27 @@ fn draw_browser(f: &mut Frame, app: &mut App, area: Rect) {
         .iter()
         .map(|e| {
             if e.is_dir {
-                ListItem::new(format!("{}/", e.name)).style(
-                    Style::default()
-                        .fg(Color::Blue)
-                        .add_modifier(Modifier::BOLD),
-                )
+                ListItem::new(format!("{}/", e.name))
+                    .style(Style::default().fg(theme.dir).add_modifier(Modifier::BOLD))
             } else {
-                ListItem::new(format!("  {}", e.name)).style(Style::default().fg(Color::Green))
+                ListItem::new(format!("  {}", e.name)).style(Style::default().fg(theme.video))
             }
         })
         .collect();
 
     let list = List::new(items)
+        .style(theme.base())
         .block(panel_block(
             &format!(" Dossier : {} ", app.browser.cwd.display()),
             focused,
+            theme,
         ))
-        .highlight_style(highlight(focused))
+        .highlight_style(highlight(focused, theme))
         .highlight_symbol(if focused { "❯ " } else { "  " });
     f.render_stateful_widget(list, area, &mut app.browser.state);
 }
 
-fn draw_options(f: &mut Frame, app: &mut App, area: Rect) {
+fn draw_options(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let focused = app.focus == Focus::Options;
     let vid = app
         .selected_video
@@ -638,24 +698,22 @@ fn draw_options(f: &mut Frame, app: &mut App, area: Rect) {
                 let (text, placeholder) = app.options.display(field);
                 let style = if placeholder {
                     // Texte indicatif grisé : ce n'est pas une valeur saisie.
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .add_modifier(Modifier::ITALIC)
+                    Style::default().fg(theme.dim).add_modifier(Modifier::ITALIC)
                 } else {
-                    Style::default().add_modifier(Modifier::BOLD)
+                    Style::default().fg(theme.fg).add_modifier(Modifier::BOLD)
                 };
                 (text, style)
             };
             let mut spans = vec![
                 Span::styled(
                     format!("{:<9}", OptionsForm::label(field)),
-                    Style::default().fg(Color::Gray),
+                    Style::default().fg(theme.label),
                 ),
                 Span::raw(" "),
                 Span::styled(value, value_style),
             ];
             if OptionsForm::is_cycle(field) {
-                spans.push(Span::styled("  ‹ ›", Style::default().fg(Color::DarkGray)));
+                spans.push(Span::styled("  ‹ ›", Style::default().fg(theme.dim)));
             }
             ListItem::new(Line::from(spans))
         })
@@ -664,8 +722,9 @@ fn draw_options(f: &mut Frame, app: &mut App, area: Rect) {
     let mut state = ListState::default();
     state.select(Some(app.options.sel));
     let list = List::new(items)
-        .block(panel_block(&format!(" Options — {vid} "), focused))
-        .highlight_style(highlight(focused))
+        .style(theme.base())
+        .block(panel_block(&format!(" Options — {vid} "), focused, theme))
+        .highlight_style(highlight(focused, theme))
         .highlight_symbol(if focused { "❯ " } else { "  " });
     f.render_stateful_widget(list, parts[0], &mut state);
 
@@ -674,44 +733,46 @@ fn draw_options(f: &mut Frame, app: &mut App, area: Rect) {
     let desc = vec![
         Line::from(Span::styled(
             role,
-            Style::default().add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.fg).add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::styled(kind, Style::default().fg(Color::Cyan))),
-        Line::from(Span::styled(hint, Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled(kind, Style::default().fg(theme.hint))),
+        Line::from(Span::styled(hint, Style::default().fg(theme.dim))),
     ];
     let title = format!(" {} ", OptionsForm::label(app.options.field()));
     f.render_widget(
         Paragraph::new(desc)
-            .block(panel_block(&title, focused))
+            .style(theme.base())
+            .block(panel_block(&title, focused, theme))
             .wrap(ratatui::widgets::Wrap { trim: true }),
         parts[1],
     );
 }
 
-fn draw_help(f: &mut Frame, app: &App, area: Rect) {
+fn draw_help(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let help = if app.options.editing {
         "Entrée valider · Échap annuler"
     } else {
         match app.focus {
             Focus::Browser => {
-                "j/k naviguer · l/↵ ouvrir · h/⌫ parent · Tab options · c convertir · q quitter"
+                "j/k naviguer · l/↵ ouvrir · h/⌫ parent · Tab options · c convertir · t thème · q quitter"
             }
             Focus::Options => {
-                "j/k champ · 0-9 saisir · ↵ éditer · h/l changer · Tab dossier · c convertir · q quitter"
+                "j/k champ · 0-9 saisir · ↵ éditer · h/l changer · Tab dossier · c convertir · t thème · q quitter"
             }
         }
     };
     f.render_widget(
         Paragraph::new(Line::from(Span::styled(
             format!(" {help}"),
-            Style::default().fg(Color::DarkGray),
-        ))),
+            Style::default().fg(theme.dim),
+        )))
+        .style(theme.base()),
         area,
     );
 }
 
-fn panel_block(title: &str, focused: bool) -> Block<'static> {
-    let color = if focused { ACCENT } else { Color::DarkGray };
+fn panel_block(title: &str, focused: bool, theme: &Theme) -> Block<'static> {
+    let color = if focused { theme.accent } else { theme.unfocused };
     Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(color))
@@ -721,14 +782,16 @@ fn panel_block(title: &str, focused: bool) -> Block<'static> {
         ))
 }
 
-fn highlight(focused: bool) -> Style {
+fn highlight(focused: bool, theme: &Theme) -> Style {
     if focused {
         Style::default()
-            .bg(ACCENT)
-            .fg(Color::Black)
+            .bg(theme.accent)
+            .fg(theme.hl_fg)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().add_modifier(Modifier::REVERSED)
+        Style::default()
+            .bg(theme.unfocused)
+            .add_modifier(Modifier::BOLD)
     }
 }
 
