@@ -267,21 +267,83 @@ impl OptionsForm {
         }
     }
 
-    fn value(&self, f: Field) -> String {
+    /// Renvoie la valeur affichée et `true` si c'est un texte indicatif (champ vide).
+    fn display(&self, f: Field) -> (String, bool) {
+        let placeholder = |s: &str, hint: &str| {
+            if s.trim().is_empty() {
+                (hint.to_string(), true)
+            } else {
+                (s.trim().to_string(), false)
+            }
+        };
         match f {
-            Field::Fps => self.fps.to_string(),
-            Field::Width => format!("{} px", self.width),
-            Field::Start => opt_or(&self.start, "début"),
-            Field::Duration => opt_or(&self.duration, "toute"),
-            Field::Colors => self.colors.to_string(),
-            Field::Dither => self.dither.label().to_string(),
-            Field::Filter => self.filter.label().to_string(),
-            Field::Loop => match self.loop_count {
-                0 => "infini".into(),
-                -1 => "aucune".into(),
-                n => format!("{n}×"),
-            },
-            Field::Output => opt_or(&self.output, "auto (.gif)"),
+            Field::Fps => (self.fps.to_string(), false),
+            Field::Width => (format!("{} px", self.width), false),
+            Field::Start => placeholder(&self.start, "s ou hh:mm:ss"),
+            Field::Duration => placeholder(&self.duration, "vidéo entière"),
+            Field::Colors => (self.colors.to_string(), false),
+            Field::Dither => (self.dither.label().to_string(), false),
+            Field::Filter => (self.filter.label().to_string(), false),
+            Field::Loop => (
+                match self.loop_count {
+                    0 => "infini".into(),
+                    -1 => "aucune".into(),
+                    n => format!("{n}×"),
+                },
+                false,
+            ),
+            Field::Output => placeholder(&self.output, "auto (même nom en .gif)"),
+        }
+    }
+
+    /// Description contextuelle du champ : [rôle, type attendu, exemple/défaut].
+    fn describe(f: Field) -> [&'static str; 3] {
+        match f {
+            Field::Fps => [
+                "Images par seconde du gif.",
+                "Type : entier > 0",
+                "Ex : 15, 24   ·   défaut 15",
+            ],
+            Field::Width => [
+                "Largeur en pixels (hauteur calculée automatiquement).",
+                "Type : entier > 0 (pixels)",
+                "Ex : 480, 1080   ·   défaut 1080",
+            ],
+            Field::Start => [
+                "Instant de début du segment à extraire.",
+                "Type : durée — secondes ou hh:mm:ss",
+                "Ex : 3, 00:00:03   ·   défaut : début de la vidéo",
+            ],
+            Field::Duration => [
+                "Durée du segment à extraire depuis le début.",
+                "Type : durée — secondes ou hh:mm:ss",
+                "Ex : 5, 00:00:05   ·   défaut : vidéo entière",
+            ],
+            Field::Colors => [
+                "Nombre maximum de couleurs de la palette.",
+                "Type : entier 2-256",
+                "Ex : 128, 256   ·   défaut 256",
+            ],
+            Field::Dither => [
+                "Méthode de tramage (h/l pour changer).",
+                "Valeurs : Aucun, Bayer, Floyd-Steinberg, Sierra2",
+                "Réduit le banding, alourdit un peu le fichier",
+            ],
+            Field::Filter => [
+                "Filtre couleur appliqué avant la palette (h/l pour changer).",
+                "Valeurs : Aucun, Noir & blanc, Sépia, Chaud, Froid…",
+                "Défaut : Aucun (couleurs d'origine)",
+            ],
+            Field::Loop => [
+                "Nombre de répétitions du gif.",
+                "Type : entier (0 = infini, -1 = aucune)",
+                "Défaut : infini",
+            ],
+            Field::Output => [
+                "Chemin du fichier gif de sortie.",
+                "Type : chemin de fichier",
+                "Défaut : même nom que la source, extension .gif",
+            ],
         }
     }
 
@@ -346,6 +408,18 @@ impl OptionsForm {
         }
         self.editing = false;
         self.buffer.clear();
+    }
+
+    /// Démarre une édition « fraîche » (tampon vide) déclenchée par la frappe d'un caractère.
+    fn type_char(&mut self, ch: char) {
+        if Self::is_cycle(self.field()) {
+            return;
+        }
+        if !self.editing {
+            self.editing = true;
+            self.buffer.clear();
+        }
+        self.buffer.push(ch);
     }
 
     fn cancel(&mut self) {
@@ -427,6 +501,10 @@ fn handle_options(app: &mut App, code: KeyCode) {
         KeyCode::Char('h') | KeyCode::Left => app.options.cycle(false),
         KeyCode::Char('l') | KeyCode::Right => app.options.cycle(true),
         KeyCode::Enter => app.options.begin_edit(),
+        // Taper directement un chiffre (ou : / .) démarre l'édition d'un champ texte.
+        KeyCode::Char(ch) if ch.is_ascii_digit() || ch == ':' || ch == '.' => {
+            app.options.type_char(ch)
+        }
         _ => {}
     }
 }
@@ -541,15 +619,32 @@ fn draw_options(f: &mut Frame, app: &mut App, area: Rect) {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "aucune vidéo".into());
 
+    let parts = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(3), Constraint::Length(5)])
+        .split(area);
+
     let items: Vec<ListItem> = FIELDS
         .iter()
         .enumerate()
         .map(|(i, &field)| {
             let editing = app.options.editing && i == app.options.sel;
-            let value = if editing {
-                format!("{}▏", app.options.buffer)
+            let (value, value_style) = if editing {
+                (
+                    format!("{}▏", app.options.buffer),
+                    Style::default().add_modifier(Modifier::BOLD),
+                )
             } else {
-                app.options.value(field)
+                let (text, placeholder) = app.options.display(field);
+                let style = if placeholder {
+                    // Texte indicatif grisé : ce n'est pas une valeur saisie.
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC)
+                } else {
+                    Style::default().add_modifier(Modifier::BOLD)
+                };
+                (text, style)
             };
             let mut spans = vec![
                 Span::styled(
@@ -557,12 +652,7 @@ fn draw_options(f: &mut Frame, app: &mut App, area: Rect) {
                     Style::default().fg(Color::Gray),
                 ),
                 Span::raw(" "),
-                Span::styled(
-                    value,
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                ),
+                Span::styled(value, value_style),
             ];
             if OptionsForm::is_cycle(field) {
                 spans.push(Span::styled("  ‹ ›", Style::default().fg(Color::DarkGray)));
@@ -577,7 +667,25 @@ fn draw_options(f: &mut Frame, app: &mut App, area: Rect) {
         .block(panel_block(&format!(" Options — {vid} "), focused))
         .highlight_style(highlight(focused))
         .highlight_symbol(if focused { "❯ " } else { "  " });
-    f.render_stateful_widget(list, area, &mut state);
+    f.render_stateful_widget(list, parts[0], &mut state);
+
+    // Panneau de description du champ sélectionné.
+    let [role, kind, hint] = OptionsForm::describe(app.options.field());
+    let desc = vec![
+        Line::from(Span::styled(
+            role,
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(kind, Style::default().fg(Color::Cyan))),
+        Line::from(Span::styled(hint, Style::default().fg(Color::DarkGray))),
+    ];
+    let title = format!(" {} ", OptionsForm::label(app.options.field()));
+    f.render_widget(
+        Paragraph::new(desc)
+            .block(panel_block(&title, focused))
+            .wrap(ratatui::widgets::Wrap { trim: true }),
+        parts[1],
+    );
 }
 
 fn draw_help(f: &mut Frame, app: &App, area: Rect) {
@@ -589,7 +697,7 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect) {
                 "j/k naviguer · l/↵ ouvrir · h/⌫ parent · Tab options · c convertir · q quitter"
             }
             Focus::Options => {
-                "j/k champ · ↵ éditer · h/l changer · Tab dossier · c convertir · q quitter"
+                "j/k champ · 0-9 saisir · ↵ éditer · h/l changer · Tab dossier · c convertir · q quitter"
             }
         }
     };
@@ -640,13 +748,4 @@ fn move_sel(state: &mut ListState, len: usize, delta: i32) {
 fn nonempty(s: &str) -> Option<String> {
     let t = s.trim();
     (!t.is_empty()).then(|| t.to_string())
-}
-
-fn opt_or(s: &str, placeholder: &str) -> String {
-    let t = s.trim();
-    if t.is_empty() {
-        placeholder.to_string()
-    } else {
-        t.to_string()
-    }
 }
