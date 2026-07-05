@@ -1,4 +1,8 @@
-# gifust
+# gifust — video to GIF converter (CLI + TUI)
+
+**Fast command-line video-to-GIF converter.** Convert MP4, MOV, MKV, WebM, AVI and more into high-quality animated GIFs from the terminal — either directly via the CLI or through an interactive TUI. Written in Rust, powered by `ffmpeg` (palette method) for crisp, lightweight GIFs. macOS & Linux, installable with Homebrew.
+
+---
 
 Convertisseur **vidéo → GIF** rapide, en ligne de commande ou via un TUI interactif façon [lazygit](https://github.com/jesseduffield/lazygit). Écrit en Rust, s'appuie sur `ffmpeg` avec la méthode palette (deux passes) pour un rendu net et léger.
 

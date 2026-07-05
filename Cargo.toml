@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/lau-sam/gifust"
 homepage = "https://github.com/lau-sam/gifust"
 readme = "README.md"
-keywords = ["gif", "video", "ffmpeg", "tui", "converter"]
+keywords = ["gif", "video-to-gif", "ffmpeg", "converter", "tui"]
 categories = ["command-line-utilities", "multimedia::video"]
 
 [[bin]]
