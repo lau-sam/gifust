@@ -2,6 +2,8 @@
 
 Convertisseur **vidéo → GIF** rapide, en ligne de commande ou via un TUI interactif façon [lazygit](https://github.com/jesseduffield/lazygit). Écrit en Rust, s'appuie sur `ffmpeg` avec la méthode palette (deux passes) pour un rendu net et léger.
 
+![Démo de gifust en CLI et en TUI](docs/demo.gif)
+
 ## Installation
 
 ### Homebrew
